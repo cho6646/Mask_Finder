@@ -7,6 +7,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
+import android.widget.Button
+import android.widget.ImageButton
+import android.widget.Toast
 import androidx.annotation.UiThread
 import com.android.volley.Request
 import com.android.volley.RequestQueue
@@ -20,7 +24,12 @@ import com.naver.maps.map.util.FusedLocationSource
 import com.naver.maps.map.util.MarkerIcons
 import org.json.JSONObject
 import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -37,6 +46,11 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var maskInfoCollected: Boolean = false
     private var selectedInfoWindow: InfoWindow = InfoWindow()
     private var storeDatas = mutableListOf<StoreData>()
+    private lateinit var gpsButton: ImageButton
+    private lateinit var searchButton: Button
+    private var markers = mutableListOf<Marker>()
+    private var infoWindows = mutableListOf<InfoWindow>()
+
 //    private lateinit var postOffice: OverlayImage
 //    private lateinit var nongHyup: OverlayImage
 //    private lateinit var drugStore: OverlayImage
@@ -52,13 +66,12 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             fm.beginTransaction().add(R.id.map, it).commit()
         }
 
+        gpsButton = findViewById<ImageButton>(R.id.gps_button)
+        searchButton = findViewById<Button>(R.id.search_button)
+
         queue = Volley.newRequestQueue(this)
 
         locationSource = FusedLocationSource(this, LOCATION_PERMISSION_REQUEST_CODE)
-
-//        postOffice = OverlayImage.fromResource(R.drawable.post_office)
-//        drugStore = OverlayImage.fromResource(R.drawable.drug_store)
-//        nongHyup = OverlayImage.fromResource(R.drawable.nong_hyup)
 
         mapFragment.getMapAsync(this)
     }
@@ -88,13 +101,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             return
 
         val url = "https://8oi9s0nnth.apigw.ntruss.com/corona19-masks/v1/storesByGeo/json?lat=${lat}&lng=${lng}&m=${meter}"
-
         // Request a string response from the provided URL.
         val stringRequest = VolleyUTF8EncodingStringRequest( Request.Method.GET, url,
             Response.Listener<String> { response ->
-                // Display the first 500 characters of the response string.
-//                textView.text = "Response is: ${response.substring(0, 500)}"
-//                Log.d("response", "Response: $response")
                 storeDatas.clear()
                 val jsonDataObject = JSONObject(response)
                 val cnt = jsonDataObject.getInt("count")
@@ -102,18 +111,20 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 for(i in 0 until cnt)
                 {
                     val item = stores.getJSONObject(i)
-                    val itemAddr = item.getString("addr")
-                    val itemCreatedAt = item.getString("created_at")
-                    val itemLat = item.getString("lat")
-                    val itemLng = item.getString("lng")
-                    val itemName = item.getString("name")
-                    val itemRemainStat = item.getString("remain_stat")
-                    val itemStockAt = item.getString("stock_at")
-                    val itemType = item.getString("type")
+                    val itemCode: String = item.getString("code")
+                    val itemAddr: String? = item.getString("addr")
+                    val itemCreatedAt: String? = item.getString("created_at")
+                    val itemLat: String = item.getString("lat")
+                    val itemLng: String = item.getString("lng")
+                    val itemName: String = item.getString("name")
+                    val itemRemainStat: String? = item.getString("remain_stat")
+                    val itemStockAt: String? = item.getString("stock_at")
+                    val itemType: String? = item.getString("type")
 
-                    storeDatas.add(StoreData(itemAddr, itemCreatedAt, itemLat.toDouble(), itemLng.toDouble(), itemName, itemRemainStat, itemStockAt, itemType))
+                    storeDatas.add(StoreData(itemCode, itemAddr, itemCreatedAt, itemLat.toDouble(), itemLng.toDouble(), itemName, itemRemainStat, itemStockAt, itemType))
                 }
                 markerAndInfoWindowSetup(cnt)
+                Toast.makeText(this, "현재 위치, 경도: ${floor(lat*100)/100}, 위도: ${floor(lng*100)/100}에서 $cnt 곳의 마스크 판매소를 찾았습니다", Toast.LENGTH_LONG).show()
             },
             Response.ErrorListener { Log.d("error","That didn't work!") })
 
@@ -122,13 +133,12 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun markerAndInfoWindowSetup(mCnt: Int){
-        val executor: Executor = Executors.newFixedThreadPool(mCnt)
+        if(mCnt == 0)
+            return
+        val executor: ExecutorService = Executors.newFixedThreadPool(mCnt)
         val handler = Handler(Looper.getMainLooper())
 
         executor.execute {
-
-            val markers = mutableListOf<Marker>()
-            val infoWindows = mutableListOf<InfoWindow>()
             var type = ""
             for(j in 0 until mCnt)
             {
@@ -178,13 +188,14 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
 
                 }
-                markers += marker
+                markers.add(marker)
                 val infoWindow = InfoWindow()
                 infoWindow.adapter = object : InfoWindow.DefaultTextAdapter(this) {
                     override fun getText(infoWindow: InfoWindow): CharSequence {
                         return "이름: ${storeDataItem.name}\n종류: $type"
                     }
                 }
+                infoWindows.add(infoWindow)
                 marker.setOnClickListener{overlay ->
                     val marker = overlay as Marker
 
@@ -208,6 +219,18 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
             }
         }
+
+        executor.shutdown()
+//        executor.awaitTermination(1, TimeUnit.SECONDS)
+    }
+
+    private fun markerAndInfoWindowClear(){
+        markers.forEach{ marker ->
+            marker.map = null
+        }
+        selectedInfoWindow.close()
+        markers.clear()
+        infoWindows.clear()
     }
 
     @UiThread
@@ -217,7 +240,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 //            .camera(CameraPosition(LatLng(35.1798159, 129.0750222), 8.0))
 //            .mapType(NaverMap.MapType.Terrain)
         // current location of camera
-        var cameraPosition = naverMap.cameraPosition
+//        var cameraPosition = naverMap.cameraPosition
         naverMap.locationSource = locationSource
         naverMap.locationTrackingMode = LocationTrackingMode.Follow
         val locationOverlay = naverMap.locationOverlay
@@ -228,7 +251,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             currentBearing = location.bearing
             if( gpsFollow )
             {
-                val cameraUpdate = CameraUpdate.scrollTo(LatLng(location.latitude, location.longitude))
+                val cameraUpdate = scrollTo(LatLng(location.latitude, location.longitude))
                 naverMap.moveCamera(cameraUpdate)
 //                locationOverlay.bearing = currentBearing
                 if( !maskInfoCollected )
@@ -246,8 +269,28 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
+        naverMap.addOnCameraIdleListener {
+            var zoom = naverMap.cameraPosition.zoom
+            zoom = min(zoom, 14.0)
+            zoom = max(zoom, 9.0)
+            mMeter = (500 + 4500*(14-zoom)/5).toInt()
+        }
+
         naverMap.setOnMapClickListener { point, coord ->
             selectedInfoWindow.close()
+        }
+
+        gpsButton.setOnClickListener{ view ->
+            var cameraUpdate = toCameraPosition(CameraPosition(LatLng(currentLat, currentLng), 14.0)).animate(CameraAnimation.Easing)
+            naverMap.moveCamera(cameraUpdate)
+            gpsFollow = true
+            maskInfoCollected = false
+        }
+
+        searchButton.setOnClickListener{ view ->
+            markerAndInfoWindowClear()
+            val cameraPositionTarget = naverMap.cameraPosition.target
+            getMaskInfo(cameraPositionTarget.latitude, cameraPositionTarget.longitude, mMeter)
         }
     }
 
