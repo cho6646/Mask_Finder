@@ -19,7 +19,7 @@
         app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_marginBottom="5dp"
+        android:layout_marginBottom="30dp"
         android:text="현재 위치에서 검색"
         android:backgroundTint="#ffffff"
         android:textSize="20sp"
@@ -34,7 +34,6 @@
         app:layout_constraintBottom_toBottomOf="@id/search_button"
         android:layout_marginRight="25dp"
         android:background="@drawable/gps_icon"
-
         />
 
     <!--    <TextView-->
