@@ -177,12 +177,12 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         val handler = Handler(Looper.getMainLooper())
 
         executor.execute {
-            var type = ""
             for(j in 0 until mCnt)
             {
                 val storeDataItem = storeDatas.get(j)
                 val marker = putInfoInMarker(storeDataItem)
 
+                var type = ""
                 if(storeDataItem.type=="01") type = "약국"
                 else if(storeDataItem.type == "02") type = "농협 하나로 마트"
                 else type = "우체국"
