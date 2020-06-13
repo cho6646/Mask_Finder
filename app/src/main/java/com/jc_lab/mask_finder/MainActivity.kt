@@ -104,8 +104,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         gpsButton.setOnClickListener{ view ->
-            var cameraUpdate = toCameraPosition(CameraPosition(LatLng(currentLat, currentLng), 14.0)).animate(CameraAnimation.Easing)
-            naverMap.moveCamera(cameraUpdate)
+            naverMap.moveCamera(toCameraPosition(CameraPosition(LatLng(currentLat, currentLng), 14.0)).animate(CameraAnimation.Easing))
             gpsFollow = true
             maskInfoCollected = false
         }
